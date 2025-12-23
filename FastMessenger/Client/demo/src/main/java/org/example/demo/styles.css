@@ -1,0 +1,79 @@
+.root {
+    -fx-font-family: "Segoe UI", Arial, sans-serif;
+}
+
+.button {
+    -fx-background-color: #3498db;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-padding: 8px 16px;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
+    -fx-cursor: hand;
+}
+
+.button:hover {
+    -fx-background-color: #2980b9;
+}
+
+.button:disabled {
+    -fx-background-color: #bdc3c7;
+    -fx-cursor: default;
+}
+
+.text-field, .text-area {
+    -fx-border-color: #bdc3c7;
+    -fx-border-radius: 4px;
+    -fx-padding: 8px;
+}
+
+.text-area {
+    -fx-background-color: #ecf0f1;
+}
+
+.text-area .content {
+    -fx-background-color: #ecf0f1;
+}
+
+.label {
+    -fx-font-size: 14px;
+}
+
+.alert {
+    -fx-font-size: 14px;
+}
+
+.alert.dialog-pane {
+    -fx-background-color: #ffffff;
+}
+
+.alert.dialog-pane .header-panel {
+    -fx-background-color: #2c3e50;
+}
+
+.alert.dialog-pane .header-panel .label {
+    -fx-text-fill: white;
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+}
+
+.scroll-pane {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar:vertical {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar:vertical .track {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar:vertical .thumb {
+    -fx-background-color: #95a5a6;
+    -fx-background-radius: 5px;
+}
+
+.scroll-bar:vertical .thumb:hover {
+    -fx-background-color: #7f8c8d;
+}
