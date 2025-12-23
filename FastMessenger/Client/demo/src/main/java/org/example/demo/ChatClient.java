@@ -8,12 +8,16 @@ import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 import java.io.*;
 import java.net.Socket;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.List;
+import java.util.ArrayList;
 
 public class ChatClient extends Application {
 
@@ -26,25 +30,25 @@ public class ChatClient extends Application {
     private Button connectButton;
     private Button sendButton;
     private Label statusLabel;
-
+    private Label userCountLabel;
+    private ListView<String> usersListView;
+    
     // Сетевое подключение
     private Socket socket;
     private BufferedReader reader;
     private PrintWriter writer;
     private AtomicBoolean isConnected = new AtomicBoolean(false);
+    
+    // Список пользователей
+    private List<String> connectedUsers = new ArrayList<>();
 
     @Override
     public void start(Stage primaryStage) {
-        // Создаем интерфейс входа
         VBox loginPane = createLoginPane();
-
         Scene scene = new Scene(loginPane, 400, 250);
-
         primaryStage.setTitle("Чат клиент - Вход");
         primaryStage.setScene(scene);
         primaryStage.show();
-
-        // Обработка закрытия окна
         primaryStage.setOnCloseRequest(e -> disconnect());
     }
 
@@ -54,17 +58,14 @@ public class ChatClient extends Application {
         loginPane.setAlignment(Pos.CENTER);
         loginPane.setStyle("-fx-background-color: #f5f5f5;");
 
-        // Заголовок
         Label titleLabel = new Label("Подключение к чату");
         titleLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #333;");
 
-        // Поля ввода
         GridPane inputGrid = new GridPane();
         inputGrid.setHgap(10);
         inputGrid.setVgap(10);
         inputGrid.setAlignment(Pos.CENTER);
 
-        // Имя пользователя
         inputGrid.add(new Label("Имя:"), 0, 0);
         usernameField = new TextField();
         usernameField.setPromptText("Ваше имя");
@@ -72,7 +73,6 @@ public class ChatClient extends Application {
         usernameField.setPrefWidth(200);
         inputGrid.add(usernameField, 1, 0);
 
-        // Адрес сервера
         inputGrid.add(new Label("Сервер:"), 0, 1);
         hostField = new TextField();
         hostField.setPromptText("localhost");
@@ -80,7 +80,6 @@ public class ChatClient extends Application {
         hostField.setPrefWidth(200);
         inputGrid.add(hostField, 1, 1);
 
-        // Порт
         inputGrid.add(new Label("Порт:"), 0, 2);
         portField = new TextField();
         portField.setPromptText("5555");
@@ -88,14 +87,11 @@ public class ChatClient extends Application {
         portField.setPrefWidth(200);
         inputGrid.add(portField, 1, 2);
 
-        // Кнопка подключения
         connectButton = new Button("Подключиться");
         connectButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold;");
         connectButton.setOnAction(e -> connectToServer());
 
-        // Добавляем все в панель
         loginPane.getChildren().addAll(titleLabel, inputGrid, connectButton);
-
         return loginPane;
     }
 
@@ -111,21 +107,12 @@ public class ChatClient extends Application {
 
         try {
             int port = Integer.parseInt(portText);
-
-            // Подключаемся к серверу
             socket = new Socket(host, port);
             reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             writer = new PrintWriter(socket.getOutputStream(), true);
-
-            // Отправляем имя пользователя
             writer.println("USERNAME:" + username);
-
             isConnected.set(true);
-
-            // Создаем интерфейс чата
             createChatInterface(username);
-
-            // Запускаем поток для чтения сообщений
             new Thread(this::readMessages).start();
 
         } catch (NumberFormatException e) {
@@ -151,6 +138,11 @@ public class ChatClient extends Application {
         statusLabel = new Label("✓ Подключен");
         statusLabel.setTextFill(Color.LIGHTGREEN);
 
+        // Метка с количеством пользователей
+        userCountLabel = new Label("Пользователей: 1");
+        userCountLabel.setTextFill(Color.WHITE);
+        userCountLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 12px;");
+
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
@@ -161,23 +153,22 @@ public class ChatClient extends Application {
             chatStage.close();
         });
 
-        topPanel.getChildren().addAll(userLabel, spacer, statusLabel, disconnectButton);
+        topPanel.getChildren().addAll(userLabel, userCountLabel, spacer, statusLabel, disconnectButton);
         chatPane.setTop(topPanel);
 
-        // Область чата
-        chatArea = new TextArea();
-        chatArea.setEditable(false);
-        chatArea.setWrapText(true);
-        chatArea.setStyle(
-                "-fx-font-family: 'Arial';" +
-                        "-fx-font-size: 14px;" +
-                        "-fx-control-inner-background: #f8f9fa;"
-        );
-
-        ScrollPane scrollPane = new ScrollPane(chatArea);
-        scrollPane.setFitToWidth(true);
-        scrollPane.setFitToHeight(true);
-        chatPane.setCenter(scrollPane);
+        // Основная область с разделителем
+        SplitPane mainSplitPane = new SplitPane();
+        
+        // Левая панель со списком пользователей
+        VBox usersPanel = createUsersPanel();
+        
+        // Правая панель с чатом
+        VBox chatPanel = createChatPanel();
+        
+        mainSplitPane.getItems().addAll(usersPanel, chatPanel);
+        mainSplitPane.setDividerPositions(0.2); // 20% для списка пользователей
+        
+        chatPane.setCenter(mainSplitPane);
 
         // Нижняя панель для ввода
         HBox bottomPanel = new HBox(10);
@@ -196,14 +187,65 @@ public class ChatClient extends Application {
         bottomPanel.getChildren().addAll(messageField, sendButton);
         chatPane.setBottom(bottomPanel);
 
-        // Создаем сцену и показываем окно
-        Scene chatScene = new Scene(chatPane, 600, 400);
+        Scene chatScene = new Scene(chatPane, 800, 500);
         chatStage.setScene(chatScene);
         chatStage.setTitle("Чат - " + username);
         chatStage.show();
-
-        // Обработка закрытия окна чата
         chatStage.setOnCloseRequest(e -> disconnect());
+    }
+
+    private VBox createUsersPanel() {
+        VBox usersPanel = new VBox();
+        usersPanel.setPadding(new Insets(10));
+        usersPanel.setSpacing(10);
+        usersPanel.setStyle("-fx-background-color: #34495e;");
+        
+        // Заголовок панели пользователей
+        Label usersTitle = new Label("Пользователи онлайн");
+        usersTitle.setFont(Font.font("Arial", FontWeight.BOLD, 14));
+        usersTitle.setTextFill(Color.WHITE);
+        
+        // Список пользователей
+        usersListView = new ListView<>();
+        usersListView.setStyle(
+            "-fx-background-color: #2c3e50;" +
+            "-fx-text-fill: white;" +
+            "-fx-control-inner-background: #2c3e50;" +
+            "-fx-font-size: 13px;"
+        );
+        usersListView.setPrefWidth(150);
+        
+        // Информация о количестве
+        Label countInfo = new Label("Всего: 1");
+        countInfo.setTextFill(Color.LIGHTGREEN);
+        countInfo.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+        
+        usersPanel.getChildren().addAll(usersTitle, countInfo, usersListView);
+        VBox.setVgrow(usersListView, Priority.ALWAYS);
+        
+        return usersPanel;
+    }
+
+    private VBox createChatPanel() {
+        VBox chatPanel = new VBox();
+        
+        // Область чата
+        chatArea = new TextArea();
+        chatArea.setEditable(false);
+        chatArea.setWrapText(true);
+        chatArea.setStyle(
+            "-fx-font-family: 'Arial';" +
+            "-fx-font-size: 14px;" +
+            "-fx-control-inner-background: #f8f9fa;"
+        );
+        
+        ScrollPane scrollPane = new ScrollPane(chatArea);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setFitToHeight(true);
+        VBox.setVgrow(scrollPane, Priority.ALWAYS);
+        
+        chatPanel.getChildren().add(scrollPane);
+        return chatPanel;
     }
 
     private void readMessages() {
@@ -213,7 +255,6 @@ public class ChatClient extends Application {
                 final String finalMessage = message;
                 Platform.runLater(() -> {
                     if (finalMessage.startsWith("HISTORY:")) {
-                        // Обработка истории
                         String history = finalMessage.substring(8);
                         String[] historyMessages = history.split("\\|");
                         for (String msg : historyMessages) {
@@ -222,11 +263,12 @@ public class ChatClient extends Application {
                             }
                         }
                         chatArea.appendText("--- Начало текущей сессии ---\n");
+                    } else if (finalMessage.startsWith("USERS_COUNT:")) {
+                        // Обработка обновления количества пользователей
+                        handleUsersUpdate(finalMessage);
                     } else {
-                        // Обычное сообщение
                         chatArea.appendText(finalMessage + "\n");
                     }
-                    // Автопрокрутка вниз
                     chatArea.setScrollTop(Double.MAX_VALUE);
                 });
             }
@@ -240,6 +282,49 @@ public class ChatClient extends Application {
             }
         } finally {
             isConnected.set(false);
+        }
+    }
+
+    private void handleUsersUpdate(String message) {
+        // Формат: USERS_COUNT:количество:user1,user2,user3
+        String[] parts = message.split(":", 3);
+        if (parts.length >= 3) {
+            int count = Integer.parseInt(parts[1]);
+            String usersString = parts[2];
+            
+            // Обновляем метку с количеством
+            userCountLabel.setText("Пользователей: " + count);
+            
+            // Обновляем список пользователей
+            connectedUsers.clear();
+            if (!usersString.isEmpty()) {
+                String[] users = usersString.split(",");
+                for (String user : users) {
+                    if (!user.trim().isEmpty()) {
+                        connectedUsers.add(user.trim());
+                    }
+                }
+            }
+            
+            // Обновляем ListView
+            usersListView.getItems().clear();
+            usersListView.getItems().addAll(connectedUsers);
+            
+            // Обновляем информацию о количестве в панели пользователей
+            updateUsersPanelCount(count);
+        }
+    }
+
+    private void updateUsersPanelCount(int count) {
+        // Находим Label с информацией о количестве
+        VBox usersPanel = (VBox) ((SplitPane) ((BorderPane) chatArea.getParent().getParent().getParent()).getCenter())
+            .getItems().get(0);
+        
+        for (javafx.scene.Node node : usersPanel.getChildren()) {
+            if (node instanceof Label && !node.equals(usersPanel.getChildren().get(0))) {
+                ((Label) node).setText("Всего: " + count);
+                break;
+            }
         }
     }
 
@@ -275,6 +360,8 @@ public class ChatClient extends Application {
             if (statusLabel != null) {
                 statusLabel.setText("✗ Отключен");
                 statusLabel.setTextFill(Color.RED);
+                userCountLabel.setText("Пользователей: 0");
+                usersListView.getItems().clear();
             }
         });
     }
@@ -287,10 +374,6 @@ public class ChatClient extends Application {
             alert.setContentText(message);
             alert.showAndWait();
         });
-    }
-
-    private String getCurrentTime() {
-        return LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
     }
 
     public static void main(String[] args) {
