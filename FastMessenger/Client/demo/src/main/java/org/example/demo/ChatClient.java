@@ -1,23 +1,36 @@
 package org.example.demo;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.net.Socket;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
-import javafx.scene.control.*;
-import javafx.scene.layout.*;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.control.ListView;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.control.SplitPane;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
-import java.io.*;
-import java.net.Socket;
-import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.List;
-import java.util.ArrayList;
 
 public class ChatClient extends Application {
 
@@ -32,13 +45,14 @@ public class ChatClient extends Application {
     private Label statusLabel;
     private Label userCountLabel;
     private ListView<String> usersListView;
-    
+    private Label usersCountInfoLabel; // Для хранения ссылки на Label в панели пользователей
+
     // Сетевое подключение
     private Socket socket;
     private BufferedReader reader;
     private PrintWriter writer;
     private AtomicBoolean isConnected = new AtomicBoolean(false);
-    
+
     // Список пользователей
     private List<String> connectedUsers = new ArrayList<>();
 
@@ -69,7 +83,7 @@ public class ChatClient extends Application {
         inputGrid.add(new Label("Имя:"), 0, 0);
         usernameField = new TextField();
         usernameField.setPromptText("Ваше имя");
-        usernameField.setText("Гость" + (int)(Math.random() * 100));
+        usernameField.setText("Гость" + (int) (Math.random() * 100));
         usernameField.setPrefWidth(200);
         inputGrid.add(usernameField, 1, 0);
 
@@ -158,16 +172,16 @@ public class ChatClient extends Application {
 
         // Основная область с разделителем
         SplitPane mainSplitPane = new SplitPane();
-        
+
         // Левая панель со списком пользователей
         VBox usersPanel = createUsersPanel();
-        
+
         // Правая панель с чатом
         VBox chatPanel = createChatPanel();
-        
+
         mainSplitPane.getItems().addAll(usersPanel, chatPanel);
         mainSplitPane.setDividerPositions(0.2); // 20% для списка пользователей
-        
+
         chatPane.setCenter(mainSplitPane);
 
         // Нижняя панель для ввода
@@ -199,51 +213,49 @@ public class ChatClient extends Application {
         usersPanel.setPadding(new Insets(10));
         usersPanel.setSpacing(10);
         usersPanel.setStyle("-fx-background-color: #34495e;");
-        
+
         // Заголовок панели пользователей
         Label usersTitle = new Label("Пользователи онлайн");
         usersTitle.setFont(Font.font("Arial", FontWeight.BOLD, 14));
         usersTitle.setTextFill(Color.WHITE);
-        
+
         // Список пользователей
         usersListView = new ListView<>();
         usersListView.setStyle(
-            "-fx-background-color: #2c3e50;" +
-            "-fx-text-fill: white;" +
-            "-fx-control-inner-background: #2c3e50;" +
-            "-fx-font-size: 13px;"
-        );
+                "-fx-background-color: #2c3e50;" +
+                        "-fx-text-fill: white;" +
+                        "-fx-control-inner-background: #2c3e50;" +
+                        "-fx-font-size: 13px;");
         usersListView.setPrefWidth(150);
-        
+
         // Информация о количестве
-        Label countInfo = new Label("Всего: 1");
-        countInfo.setTextFill(Color.LIGHTGREEN);
-        countInfo.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-        
-        usersPanel.getChildren().addAll(usersTitle, countInfo, usersListView);
+        usersCountInfoLabel = new Label("Всего: 1"); // Сохраняем ссылку
+        usersCountInfoLabel.setTextFill(Color.LIGHTGREEN);
+        usersCountInfoLabel.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+
+        usersPanel.getChildren().addAll(usersTitle, usersCountInfoLabel, usersListView);
         VBox.setVgrow(usersListView, Priority.ALWAYS);
-        
+
         return usersPanel;
     }
 
     private VBox createChatPanel() {
         VBox chatPanel = new VBox();
-        
+
         // Область чата
         chatArea = new TextArea();
         chatArea.setEditable(false);
         chatArea.setWrapText(true);
         chatArea.setStyle(
-            "-fx-font-family: 'Arial';" +
-            "-fx-font-size: 14px;" +
-            "-fx-control-inner-background: #f8f9fa;"
-        );
-        
+                "-fx-font-family: 'Arial';" +
+                        "-fx-font-size: 14px;" +
+                        "-fx-control-inner-background: #f8f9fa;");
+
         ScrollPane scrollPane = new ScrollPane(chatArea);
         scrollPane.setFitToWidth(true);
         scrollPane.setFitToHeight(true);
         VBox.setVgrow(scrollPane, Priority.ALWAYS);
-        
+
         chatPanel.getChildren().add(scrollPane);
         return chatPanel;
     }
@@ -263,7 +275,7 @@ public class ChatClient extends Application {
                             }
                         }
                         chatArea.appendText("--- Начало текущей сессии ---\n");
-                    } else if (finalMessage.startsWith("USERS_COUNT:")) {
+                    } else if (finalMessage.contains("USERS_COUNT:")) {
                         // Обработка обновления количества пользователей
                         handleUsersUpdate(finalMessage);
                     } else {
@@ -291,10 +303,10 @@ public class ChatClient extends Application {
         if (parts.length >= 3) {
             int count = Integer.parseInt(parts[1]);
             String usersString = parts[2];
-            
+
             // Обновляем метку с количеством
             userCountLabel.setText("Пользователей: " + count);
-            
+
             // Обновляем список пользователей
             connectedUsers.clear();
             if (!usersString.isEmpty()) {
@@ -305,27 +317,26 @@ public class ChatClient extends Application {
                     }
                 }
             }
-            
+
             // Обновляем ListView
             usersListView.getItems().clear();
             usersListView.getItems().addAll(connectedUsers);
-            
+
             // Обновляем информацию о количестве в панели пользователей
             updateUsersPanelCount(count);
         }
     }
 
     private void updateUsersPanelCount(int count) {
-        // Находим Label с информацией о количестве
-        VBox usersPanel = (VBox) ((SplitPane) ((BorderPane) chatArea.getParent().getParent().getParent()).getCenter())
-            .getItems().get(0);
-        
-        for (javafx.scene.Node node : usersPanel.getChildren()) {
-            if (node instanceof Label && !node.equals(usersPanel.getChildren().get(0))) {
-                ((Label) node).setText("Всего: " + count);
-                break;
+        Platform.runLater(() -> {
+            // Обновляем метку в верхней панели
+            userCountLabel.setText("Пользователей: " + count);
+
+            // Обновляем метку в панели пользователей
+            if (usersCountInfoLabel != null) {
+                usersCountInfoLabel.setText("Всего: " + count);
             }
-        }
+        });
     }
 
     private void sendMessage() {
@@ -350,8 +361,10 @@ public class ChatClient extends Application {
                 writer.println("DISCONNECT");
                 writer.close();
             }
-            if (reader != null) reader.close();
-            if (socket != null) socket.close();
+            if (reader != null)
+                reader.close();
+            if (socket != null)
+                socket.close();
         } catch (IOException e) {
             // Игнорируем ошибки при закрытии
         }
