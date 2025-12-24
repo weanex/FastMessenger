@@ -5,74 +5,77 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;
+import java.net.SocketTimeoutException;
 
 public class NetworkClient {
     private Socket socket;
     private BufferedReader reader;
     private PrintWriter writer;
-    private AtomicBoolean isConnected;
-    private Consumer<String> messageHandler;
+    private boolean connected;
     private String host;
     private int port;
 
-    public NetworkClient(String host, int port, Consumer<String> messageHandler) {
+    public NetworkClient(String host, int port) {
         this.host = host;
         this.port = port;
-        this.messageHandler = messageHandler;
-        this.isConnected = new AtomicBoolean(false);
+        this.connected = false;
     }
 
     public boolean connect() {
         try {
             socket = new Socket(host, port);
-            reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            socket.setSoTimeout(5000); // Таймаут 5 секунд
+            
+            reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"));
             writer = new PrintWriter(socket.getOutputStream(), true);
-            isConnected.set(true);
+            
+            connected = true;
             return true;
         } catch (IOException e) {
+            System.err.println("Ошибка подключения к " + host + ":" + port + ": " + e.getMessage());
             return false;
         }
     }
 
-    public void startReading() {
-        try {
-            String message;
-            while (isConnected.get() && (message = reader.readLine()) != null) {
-                messageHandler.accept(message);
-            }
-        } catch (IOException e) {
-            if (isConnected.get()) {
-                messageHandler.accept("Ошибка соединения с сервером");
-            }
-        } finally {
-            disconnect();
+    public void send(String message) throws IOException {
+        if (!connected || writer == null) {
+            throw new IOException("Соединение не установлено");
         }
+        writer.println(message);
     }
 
-    public void sendMessage(String message) {
-        if (writer != null && isConnected.get()) {
-            writer.println(message);
+    public String receive() throws IOException {
+        if (!connected || reader == null) {
+            throw new IOException("Соединение не установлено");
+        }
+        
+        try {
+            return reader.readLine();
+        } catch (SocketTimeoutException e) {
+            // Таймаут - это нормально, продолжаем слушать
+            return "";
         }
     }
 
     public void disconnect() {
-        isConnected.set(false);
+        connected = false;
         
         try {
             if (writer != null) {
-                writer.println("DISCONNECT");
                 writer.close();
             }
-            if (reader != null) reader.close();
-            if (socket != null) socket.close();
+            if (reader != null) {
+                reader.close();
+            }
+            if (socket != null) {
+                socket.close();
+            }
         } catch (IOException e) {
-            // Игнорируем ошибки при закрытии
+            System.err.println("Ошибка при закрытии соединения: " + e.getMessage());
         }
     }
 
     public boolean isConnected() {
-        return isConnected.get();
+        return connected && socket != null && !socket.isClosed();
     }
 }

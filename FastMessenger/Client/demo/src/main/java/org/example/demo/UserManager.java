@@ -5,39 +5,39 @@ import java.util.List;
 
 public class UserManager {
     private List<String> connectedUsers;
-    private ChatView view;
 
-    public UserManager(ChatView view) {
-        this.view = view;
+    public UserManager() {
         this.connectedUsers = new ArrayList<>();
     }
 
     public void updateUsersFromServer(String message) {
-        // Формат: USERS_COUNT:количество:user1,user2,user3
-        String[] parts = message.split(":", 3);
-        if (parts.length >= 3) {
-            int count = Integer.parseInt(parts[1]);
+        try {
+            // Формат: USERS_COUNT:количество:user1,user2,user3
+            String[] parts = message.split(":", 3);
+            if (parts.length < 3) {
+                System.err.println("Некорректный формат сообщения о пользователях: " + message);
+                return;
+            }
+            
             String usersString = parts[2];
-
             connectedUsers.clear();
+            
             if (!usersString.isEmpty()) {
                 String[] users = usersString.split(",");
                 for (String user : users) {
-                    if (!user.trim().isEmpty()) {
-                        connectedUsers.add(user.trim());
+                    String trimmedUser = user.trim();
+                    if (!trimmedUser.isEmpty()) {
+                        connectedUsers.add(trimmedUser);
                     }
                 }
             }
-
-            view.updateUserList(connectedUsers);
-            view.updateUserCount(count);
+        } catch (Exception e) {
+            System.err.println("Ошибка обработки списка пользователей: " + e.getMessage());
         }
     }
 
     public void clearUsers() {
         connectedUsers.clear();
-        view.updateUserList(connectedUsers);
-        view.updateUserCount(0);
     }
 
     public List<String> getConnectedUsers() {

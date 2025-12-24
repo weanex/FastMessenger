@@ -9,6 +9,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
+import java.util.List;
 
 public class ChatView {
     private ChatController controller;
@@ -25,27 +26,36 @@ public class ChatView {
     private Label userCountLabel;
     private ListView<String> usersListView;
     private Label usersCountInfoLabel;
+    private Stage primaryStage;
     
     public ChatView(ChatController controller) {
         this.controller = controller;
     }
 
-    public void showLoginScreen(Stage primaryStage) {
+    public void showLoginScreen(Stage stage) {
+        this.primaryStage = stage;
+        
         VBox loginPane = createLoginPane();
         Scene scene = new Scene(loginPane, 400, 250);
-        primaryStage.setTitle("Чат клиент - Вход");
-        primaryStage.setScene(scene);
-        primaryStage.show();
-        primaryStage.setOnCloseRequest(e -> controller.disconnect());
+        
+        stage.setTitle("Чат клиент - Вход");
+        stage.setScene(scene);
+        stage.show();
+        stage.setOnCloseRequest(e -> controller.disconnect());
     }
 
     public void showChatInterface(String username) {
+        // Закрываем окно логина
+        if (primaryStage != null) {
+            primaryStage.close();
+        }
+        
         Stage chatStage = new Stage();
         BorderPane chatPane = createMainChatPane(username);
-        
         Scene chatScene = new Scene(chatPane, 800, 500);
-        chatStage.setScene(chatScene);
+        
         chatStage.setTitle("Чат - " + username);
+        chatStage.setScene(chatScene);
         chatStage.show();
         chatStage.setOnCloseRequest(e -> controller.disconnect());
     }
@@ -72,9 +82,20 @@ public class ChatView {
         inputGrid.setVgap(10);
         inputGrid.setAlignment(Pos.CENTER);
 
-        usernameField = createTextField("Ваше имя", "Гость" + (int) (Math.random() * 100));
-        hostField = createTextField("localhost", "localhost");
-        portField = createTextField("5555", "5555");
+        usernameField = new TextField();
+        usernameField.setPromptText("Ваше имя");
+        usernameField.setText("Гость" + (int)(Math.random() * 1000));
+        usernameField.setPrefWidth(200);
+
+        hostField = new TextField();
+        hostField.setPromptText("localhost");
+        hostField.setText("localhost");
+        hostField.setPrefWidth(200);
+
+        portField = new TextField();
+        portField.setPromptText("5555");
+        portField.setText("5555");
+        portField.setPrefWidth(200);
 
         inputGrid.add(new Label("Имя:"), 0, 0);
         inputGrid.add(usernameField, 1, 0);
@@ -86,37 +107,27 @@ public class ChatView {
         return inputGrid;
     }
 
-    private TextField createTextField(String prompt, String defaultValue) {
-        TextField textField = new TextField();
-        textField.setPromptText(prompt);
-        textField.setText(defaultValue);
-        textField.setPrefWidth(200);
-        return textField;
-    }
-
     private Button createConnectButton() {
         Button button = new Button("Подключиться");
         button.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold;");
-        button.setOnAction(e -> attemptConnection());
+        button.setOnAction(e -> {
+            String username = usernameField.getText().trim();
+            String host = hostField.getText().trim();
+            String portText = portField.getText().trim();
+
+            if (username.isEmpty() || host.isEmpty() || portText.isEmpty()) {
+                showAlert("Ошибка", "Заполните все поля");
+                return;
+            }
+
+            try {
+                int port = Integer.parseInt(portText);
+                controller.connectToServer(username, host, port);
+            } catch (NumberFormatException ex) {
+                showAlert("Ошибка", "Порт должен быть числом");
+            }
+        });
         return button;
-    }
-
-    private void attemptConnection() {
-        String username = usernameField.getText().trim();
-        String host = hostField.getText().trim();
-        String portText = portField.getText().trim();
-
-        if (username.isEmpty() || host.isEmpty() || portText.isEmpty()) {
-            controller.showAlert("Ошибка", "Заполните все поля");
-            return;
-        }
-
-        try {
-            int port = Integer.parseInt(portText);
-            controller.connectToServer(username, host, port);
-        } catch (NumberFormatException e) {
-            controller.showAlert("Ошибка", "Порт должен быть числом");
-        }
     }
 
     private BorderPane createMainChatPane(String username) {
@@ -147,17 +158,12 @@ public class ChatView {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        Button disconnectButton = createDisconnectButton();
+        Button disconnectButton = new Button("Выйти");
+        disconnectButton.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white;");
+        disconnectButton.setOnAction(e -> controller.disconnect());
 
         topPanel.getChildren().addAll(userLabel, userCountLabel, spacer, statusLabel, disconnectButton);
         return topPanel;
-    }
-
-    private Button createDisconnectButton() {
-        Button button = new Button("Выйти");
-        button.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white;");
-        button.setOnAction(e -> controller.disconnect());
-        return button;
     }
 
     private SplitPane createMainSplitPane() {
@@ -266,22 +272,33 @@ public class ChatView {
             statusLabel.setText("✗ Отключен");
             statusLabel.setTextFill(Color.RED);
             userCountLabel.setText("Пользователей: 0");
+            if (usersCountInfoLabel != null) {
+                usersCountInfoLabel.setText("Всего: 0");
+            }
         }
     }
 
-    public void updateUserList(java.util.List<String> users) {
-        usersListView.getItems().clear();
-        usersListView.getItems().addAll(users);
+    public void updateUserList(List<String> users) {
+        if (usersListView != null) {
+            usersListView.getItems().clear();
+            usersListView.getItems().addAll(users);
+        }
     }
 
     public void updateUserCount(int count) {
-        userCountLabel.setText("Пользователей: " + count);
+        if (userCountLabel != null) {
+            userCountLabel.setText("Пользователей: " + count);
+        }
         if (usersCountInfoLabel != null) {
             usersCountInfoLabel.setText("Всего: " + count);
         }
     }
 
-    public void clearChatArea() {
-        chatArea.clear();
+    private void showAlert(String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
     }
 }
